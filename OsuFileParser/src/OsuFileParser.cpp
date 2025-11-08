@@ -3,7 +3,7 @@
 namespace ofp {
 
 	std::string testOFP(std::string input) {
-		return input + "!";
+		return input + "!x";
 	}
 
 }
