@@ -1,7 +1,8 @@
-#include <OsuFileParser.h>
-#include <Profiler.h>
+#include <OFP/OsuFileParser.h>
+#include <O2Profiler/Profiler.h>
 #include <iostream>
 #include <execution>
+#include <unordered_map>
 
 int main() {
 	// C:\Users\Baio\Desktop\Games\osu!\Songs\1061136 osu!mania 7K Dan Course - Dan Phase IV\osu!mania 7K Dan Course - Dan Phase IV (Jinjin) [Stellium Dan (Regular)].osu
@@ -43,38 +44,75 @@ int main() {
 	std::vector<fs::path> osuFilepaths = ofp::findOsuFiles("C:\\Users\\Baio\\Desktop\\Games\\osu!\\Songs");
 	);
 	PROFILE_REPORT();
-	
-	std::cout << "=== [parse all osu files] ===" << std::endl;
 
-	PROFILED("parse all osu filepaths",
-	int validMaps = 0;
+	PROFILE_BEGIN("read all last-write-times", _read_all_last_write_times);
+	std::unordered_map<std::string, fs::file_time_type> lastWriteTimes;
+	lastWriteTimes.reserve(osuFilepaths.size());
 	for (const fs::path& osuFilepath : osuFilepaths) {
-		ofp::OsuBeatmap osuBeatmap = ofp::readOsuFile(osuFilepath);
-		if (osuBeatmap.valid) {
-			validMaps++;
+		std::error_code ec;
+		fs::file_time_type lastWriteTime = fs::last_write_time(osuFilepath, ec);
+		if (!ec) {
+			lastWriteTimes.emplace(osuFilepath.u8string(), lastWriteTime);
+		}
+		else {
+			lastWriteTimes.emplace(osuFilepath.u8string(), fs::file_time_type::min());
 		}
 	}
-	);
+	PROFILE_END(_read_all_last_write_times);
 	PROFILE_REPORT();
-	std::cout << "Valid maps: " << validMaps << " / " << osuFilepaths.size() << std::endl;
 
-	std::cout << "=== [parse all osu files (multithreading)] ===" << std::endl;
-
-	PROFILED("parse all osu filepaths",
-	validMaps = std::transform_reduce(
+	PROFILE_BEGIN("parse all osu files (skip unmodified)", _parse_all_osu_filepaths);
+	int validMaps = std::transform_reduce(
 		std::execution::par,                  // run in parallel
 		osuFilepaths.begin(),
 		osuFilepaths.end(),
 		0,
 		std::plus<>(),                        // how to combine results
-		[](const fs::path& osuFilepath) {
-			ofp::OsuBeatmap osuBeatmap = ofp::readOsuFile(osuFilepath);
-			return osuBeatmap.valid ? 1 : 0;
+		[&lastWriteTimes](const fs::path& osuFilepath) {
+			if (lastWriteTimes[osuFilepath.u8string()] != fs::last_write_time(osuFilepath)) {
+				ofp::OsuBeatmap osuBeatmap = ofp::readOsuFile(osuFilepath);
+				return osuBeatmap.valid ? 1 : 0;
+			}
+			else {
+				return 1;
+			}
 		}
 	);
-	);
+	PROFILE_END(_parse_all_osu_filepaths);
 	PROFILE_REPORT();
 	std::cout << "Valid maps: " << validMaps << " / " << osuFilepaths.size() << std::endl;
+	
+	std::cout << "=== [parse all osu files] ===" << std::endl;
+
+	//PROFILED("parse all osu filepaths",
+	//validMaps = 0;
+	//for (const fs::path& osuFilepath : osuFilepaths) {
+	//	ofp::OsuBeatmap osuBeatmap = ofp::readOsuFile(osuFilepath);
+	//	if (osuBeatmap.valid) {
+	//		validMaps++;
+	//	}
+	//}
+	//);
+	//PROFILE_REPORT();
+	//std::cout << "Valid maps: " << validMaps << " / " << osuFilepaths.size() << std::endl;
+
+	std::cout << "=== [parse all osu files (multithreading)] ===" << std::endl;
+
+	//PROFILED("parse all osu filepaths",
+	//validMaps = std::transform_reduce(
+	//	std::execution::par,                  // run in parallel
+	//	osuFilepaths.begin(),
+	//	osuFilepaths.end(),
+	//	0,
+	//	std::plus<>(),                        // how to combine results
+	//	[](const fs::path& osuFilepath) {
+	//		ofp::OsuBeatmap osuBeatmap = ofp::readOsuFile(osuFilepath);
+	//		return osuBeatmap.valid ? 1 : 0;
+	//	}
+	//);
+	//);
+	//PROFILE_REPORT();
+	//std::cout << "Valid maps: " << validMaps << " / " << osuFilepaths.size() << std::endl;
 
 	return 0;
 }

@@ -74,3 +74,13 @@ Valid maps: 24487 / 28870
 Valid maps: 24487 / 28870
 
 with and without multithreading takes ~3mins in debug mode for full map list
+
+[[[ skip unmodified files (debug) ]]]
+Found 28870 files in 2072ms
+=== PROFILING RESULTS ===
+  find all osu filepaths - 2072.65 ms (1 calls)
+=== PROFILING RESULTS ===
+  read all last-write-times - 920.934 ms (1 calls)
+=== PROFILING RESULTS ===
+  parse all osu files (skip unmodified) - 241.329 ms (1 calls)
+Valid maps: 28870 / 28870

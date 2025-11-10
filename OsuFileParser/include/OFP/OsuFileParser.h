@@ -7,16 +7,6 @@ namespace fs = std::filesystem;
 
 namespace ofp {
 
-	struct Section {
-		std::string_view name;
-		std::unordered_map<std::string_view, std::string_view> entries;
-	};
-
-	struct OsuFile {
-		std::string version;
-		std::vector<Section> sections;
-	};
-
 	struct OsuTimingPoint {
 		int time;
 		double beatLength;

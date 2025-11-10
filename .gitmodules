@@ -1,0 +1,3 @@
+[submodule "O2Profiler"]
+	path = O2Profiler
+	url = https://github.com/TannerLow/O2Profiler.git

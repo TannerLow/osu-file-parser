@@ -1,8 +1,8 @@
-#include "OsuFileParser.h"
+#include "OFP/OsuFileParser.h"
 #include <fstream>
 #include <iostream>
 #include <chrono>
-#include "Profiler.h"
+#include <O2Profiler/Profiler.h>
 #include <charconv>
 
 #define ERROR_INT -0xBAD'123
@@ -222,30 +222,6 @@ namespace ofp {
         }
 
         sv.remove_suffix(static_cast<size_t>((begin + sv.size()) - p));
-    }
-
-    OsuFile parseOsuLines_sections(std::vector<std::string_view>& lines, long long& timeElapsedMicro) {
-        PROFILE_SCOPE(__FUNCTION__);
-        
-        int sections = 0;
-        for (auto& line : lines) {
-            trimFront(line);
-            
-            // skip comments
-            if (line.size() > 2 and line[0] == '/' and line[1] == '/') {
-                continue;
-            }
-        
-            trimBack(line);
-            
-            // check for section header
-            if (line.size() > 2 and line.front() == '[' and line.back() == ']') {
-                sections++;
-            }
-        }
-
-        OsuFile osuFile;
-        return osuFile;
     }
 
     int stringToInt(const std::string_view& sv) {
@@ -750,62 +726,6 @@ namespace ofp {
 
         osuBeatmap.valid = true;
         return osuBeatmap;
-    }
-
-    OsuFile parseOsuLinesSample(const std::vector<std::string_view>& lines) {
-        auto startTime = std::chrono::steady_clock::now();
-
-        OsuFile osu;
-        Section* current = nullptr;
-
-        for (auto line : lines) {
-            // Trim whitespace (simple)
-            while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front())))
-                line.remove_prefix(1);
-            while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
-                line.remove_suffix(1);
-
-            if (line.empty()) continue;
-
-            // Detect section
-            if (line.front() == '[' && line.back() == ']') {
-                osu.sections.push_back({ line.substr(1, line.size() - 2), {} });
-                current = &osu.sections.back();
-            }
-            // Detect key-value pair
-            else if (auto pos = line.find(':'); pos != std::string_view::npos) {
-                auto key = line.substr(0, pos);
-                auto value = line.substr(pos + 1);
-
-                // Trim spaces around key and value
-                while (!key.empty() && std::isspace(static_cast<unsigned char>(key.front())))
-                    key.remove_prefix(1);
-                while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back())))
-                    key.remove_suffix(1);
-                while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
-                    value.remove_prefix(1);
-                while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
-                    value.remove_suffix(1);
-
-                if (current)
-                    current->entries[key] = value;
-            }
-            // Detect header
-            else if (startsWith(line, "osu file format v")) {
-                osu.version = line;
-            }
-        }
-
-        auto endTime = std::chrono::steady_clock::now();
-
-        auto timeElapsed = endTime - startTime;
-        long long timeElapsedMicro = std::chrono::duration_cast<std::chrono::microseconds>(timeElapsed).count();
-
-        //std::cout << "File contents:\n" << contents;
-        std::cout << "Parsed in " << lines.size() << " lines in " << timeElapsedMicro << "us" << std::endl;
-        std::cout << ((double)timeElapsedMicro / lines.size()) << "us per line" << std::endl;
-
-        return osu;
     }
 
     OsuBeatmap readOsuFile(const fs::path& filepath) {

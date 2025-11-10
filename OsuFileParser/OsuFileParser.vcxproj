@@ -19,12 +19,15 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\OsuFileParser.cpp" />
-    <ClCompile Include="src\Profiler.cpp" />
+    <ClCompile Include="src\OFP\OsuFileParser.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\OsuFileParser.h" />
-    <ClInclude Include="include\Profiler.h" />
+    <ClInclude Include="include\OFP\OsuFileParser.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\O2Profiler\O2Profiler\O2Profiler.vcxproj">
+      <Project>{20dc4dcf-a11f-4cd5-9573-4f90f265f296}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -74,10 +77,12 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="OsuFileParser_Debug.props" />
+    <Import Project="..\O2Profiler\O2Profiler\O2Profiler_Debug.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="OsuFileParser_Release.props" />
+    <Import Project="..\O2Profiler\O2Profiler\O2Profiler_Release.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

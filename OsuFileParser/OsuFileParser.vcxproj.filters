@@ -15,18 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\OsuFileParser.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Profiler.cpp">
+    <ClCompile Include="src\OFP\OsuFileParser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\OsuFileParser.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="include\Profiler.h">
+    <ClInclude Include="include\OFP\OsuFileParser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
