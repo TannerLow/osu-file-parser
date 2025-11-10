@@ -1,0 +1,76 @@
+
+[[[ just sections ]]]
+
+=== PROFILING RESULTS ===
+  read small osu file - 0.7013 ms (1 calls)
+    ofp::readOsuFile - 0.6803 ms (1 calls)
+      ofp::parseOsuLines_sections - 0.1681 ms (1 calls)
+=== PROFILING RESULTS ===
+  read large osu file - 3.776 ms (1 calls)
+    ofp::readOsuFile - 3.7629 ms (1 calls)
+      ofp::parseOsuLines_sections - 1.0274 ms (1 calls)
+
+[[[ no hit objects (debug) ]]]
+=== PROFILING RESULTS ===
+  read small osu file - 0.8666 ms (1 calls)
+    ofp::readOsuFile - 0.8409 ms (1 calls)
+      ofp::parseOsuLines_noHitObjects - 0.244 ms (1 calls)
+=== PROFILING RESULTS ===
+  read large osu file - 4.0591 ms (1 calls)
+    ofp::readOsuFile - 4.0415 ms (1 calls)
+      ofp::parseOsuLines_noHitObjects - 1.2104 ms (1 calls)
+
+[[[ no hit objects (release) ]]]
+=== PROFILING RESULTS ===
+  read small osu file - 0.1547 ms (1 calls)
+    ofp::readOsuFile - 0.1518 ms (1 calls)
+      ofp::parseOsuLines_noHitObjects - 0.0118 ms (1 calls)
+=== PROFILING RESULTS ===
+  read large osu file - 0.7561 ms (1 calls)
+    ofp::readOsuFile - 0.7534 ms (1 calls)
+      ofp::parseOsuLines_noHitObjects - 0.0484 ms (1 calls)
+
+[[[ parse all maps no hit objects (release) ]]]
+Found 28870 files in 772ms
+=== PROFILING RESULTS ===
+  find all osu filepaths - 773.277 ms (1 calls)
+=== PROFILING RESULTS ===
+  parse all osu filepaths - 21982.7 ms (1 calls)
+    ofp::readOsuFile - 21968.8 ms (28870 calls)
+      ofp::parseOsuLines_noHitObjects - 444.301 ms (28870 calls)
+Valid maps: 24487 / 28870
+
+[[[ parse all maps no hit objects (debug) ]]]
+Found 28870 files in 2053ms
+=== PROFILING RESULTS ===
+  find all osu filepaths - 2054.6 ms (1 calls)
+=== PROFILING RESULTS ===
+  parse all osu filepaths - 21939.1 ms (1 calls)
+    ofp::readOsuFile - 21778.6 ms (28870 calls)
+      ofp::parseOsuLines_noHitObjects - 9464.69 ms (28870 calls)
+Valid maps: 24487 / 28870
+
+[[[ parse all maps (release) ]]]
+Found 28870 files in 593ms
+=== PROFILING RESULTS ===
+  find all osu filepaths - 593.991 ms (1 calls)
+=== PROFILING RESULTS ===
+  parse all osu filepaths - 10885.1 ms (1 calls)
+    ofp::readOsuFile - 10859.9 ms (28870 calls)
+      ofp::parseOsuLines - 6919.93 ms (28870 calls)
+Valid maps: 24487 / 28870
+
+[[[ parse all maps w/ multithreading run (release) ]]]
+Found 28870 files in 555ms
+=== PROFILING RESULTS ===
+  find all osu filepaths - 556.178 ms (1 calls)
+=== [parse all osu files] ===
+=== PROFILING RESULTS ===
+  parse all osu filepaths - 10869.6 ms (1 calls)
+Valid maps: 24487 / 28870
+=== [parse all osu files (multithreading)] ===
+=== PROFILING RESULTS ===
+  parse all osu filepaths - 1765 ms (1 calls)
+Valid maps: 24487 / 28870
+
+with and without multithreading takes ~3mins in debug mode for full map list

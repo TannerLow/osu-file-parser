@@ -1,13 +1,14 @@
-#include "../include/OsuFileParser.h"
+#include "OsuFileParser.h"
 #include <fstream>
 #include <iostream>
 #include <chrono>
+#include "Profiler.h"
+#include <charconv>
+
+#define ERROR_INT -0xBAD'123
+#define ERROR_DOUBLE -DBL_MAX
 
 namespace ofp {
-
-	std::string testOFP(std::string input) {
-		return input + "!";
-	}
 
 	bool readFile(const fs::path& filepath) {
         auto start = std::chrono::steady_clock::now();
@@ -223,8 +224,8 @@ namespace ofp {
         sv.remove_suffix(static_cast<size_t>((begin + sv.size()) - p));
     }
 
-    OsuFile parseOsuLines(std::vector<std::string_view>& lines, long long& timeElapsedMicro) {
-        auto startTime = std::chrono::steady_clock::now();
+    OsuFile parseOsuLines_sections(std::vector<std::string_view>& lines, long long& timeElapsedMicro) {
+        PROFILE_SCOPE(__FUNCTION__);
         
         int sections = 0;
         for (auto& line : lines) {
@@ -242,18 +243,513 @@ namespace ofp {
                 sections++;
             }
         }
-        
-        auto endTime = std::chrono::steady_clock::now();
-        
-        auto timeElapsed = endTime - startTime;
-        timeElapsedMicro = std::chrono::duration_cast<std::chrono::microseconds>(timeElapsed).count();
-        
-        //std::cout << "Parsed in " << lines.size() << " lines in " << timeElapsedMicro << "us" << std::endl;
-        //std::cout << ((double)timeElapsedMicro / lines.size()) << "us per line" << std::endl;
-        //std::cout << sections << " sections found" << std::endl;
 
         OsuFile osuFile;
         return osuFile;
+    }
+
+    int stringToInt(const std::string_view& sv) {
+        int value = 0;
+
+        auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), value);
+        if (ec != std::errc()) {
+            return ERROR_INT;
+        }
+
+        return value;
+    }
+
+    double stringToDouble(const std::string_view& sv) {
+        double value = 0.0;
+
+        auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), value);
+        if (ec != std::errc()) {
+            return ERROR_DOUBLE;
+        }
+
+        return value;
+    }
+
+    int stringIntToLane(const std::string_view& sv, int keyMode) {
+        int x = stringToInt(sv);
+        if (x == ERROR_INT) {
+            return ERROR_INT;
+        }
+
+        int column = x * keyMode / 512;
+
+        return std::max(0, std::min(column, keyMode-1));
+    }
+
+    std::vector<std::string_view> split(const std::string_view& str, char delim) {
+        std::vector<std::string_view> parts;
+        parts.reserve(10);
+
+        size_t start = 0;
+        while (true) {
+            size_t pos = str.find(delim, start);
+            if (pos == std::string_view::npos) {
+                parts.emplace_back(str.substr(start));
+                break;
+            }
+            parts.emplace_back(str.substr(start, pos - start));
+            start = pos + 1;
+        }
+
+        return parts;
+    }
+
+    bool containsCaseInsensitive(const std::string_view& text, const std::string_view& sub) {
+        auto it = std::search(
+            text.begin(), text.end(),
+            sub.begin(), sub.end(),
+            [](unsigned char a, unsigned char b) {
+                return std::tolower(a) == std::tolower(b);
+            });
+
+        return it != text.end();
+    }
+
+    OsuBeatmap parseOsuLines_noHitObjects(std::vector<std::string_view>& lines) {
+        PROFILE_SCOPE(__FUNCTION__);
+
+        enum Section {
+            General, 
+            Editor, 
+            Metadata, 
+            Difficulty, 
+            Events, 
+            TimingPoints, 
+            HitObjects,
+            Colours,
+            N_A
+        };
+
+        OsuBeatmap osuBeatmap;
+
+        constexpr std::string_view fileFormatHeader = "osu file format v";
+        Section currentSection = N_A;
+        bool backgroundFound = false;
+
+        for (auto& line : lines) {
+            trimFront(line);
+
+            // skip comments
+            if (line.size() > 2 and line[0] == '/' and line[1] == '/') {
+                continue;
+            }
+
+            trimBack(line);
+
+            if (line.empty()) {
+                continue;
+            }
+
+            // check for section header
+            if (line.size() > 2 and line.front() == '[' and line.back() == ']') {
+                std::string_view section = line.substr(1, line.size() - 2);
+                if (section == "General") {
+                    currentSection = General;
+                }
+                else if (section == "Editor") {
+                    currentSection = Editor;
+                }
+                else if (section == "Metadata") {
+                    currentSection = Metadata;
+                }
+                else if (section == "Difficulty") {
+                    currentSection = Difficulty;
+                }
+                else if (section == "Events") {
+                    currentSection = Events;
+                }
+                else if (section == "TimingPoints") {
+                    currentSection = TimingPoints;
+                }
+                else if (section == "HitObjects") {
+                    currentSection = HitObjects;
+                }
+                else if (section == "Colours") {
+                    currentSection = Colours;
+                }
+                else {
+                    currentSection = N_A;
+                }
+
+                continue;
+            }
+
+            switch (currentSection) {
+            
+            case N_A: {
+                size_t found = line.find(fileFormatHeader);
+                if (found != line.npos) {
+                    // NOTE currently not used/stored, may need later for skipping old versions
+                    std::string_view version = line.substr(found + fileFormatHeader.size());
+                }
+                break;
+            }
+            case General: {
+                size_t pos = line.find(':'); 
+                if (pos != std::string_view::npos) {
+                    std::string_view key = line.substr(0, pos);
+                    std::string_view value = line.substr(pos + 1);
+                    trimFront(value);
+                
+                    if (key == "AudioFilename") {
+                        osuBeatmap.audioFilename = value;
+                    }
+                    else if (key == "PreviewTime") {
+                        osuBeatmap.previewTime = stringToInt(value);
+                        if (osuBeatmap.previewTime == ERROR_INT) {
+                            osuBeatmap.previewTime = false;
+                            return osuBeatmap;
+                        }
+                    }
+                    else if (key == "Mode") {
+                        if (value != "3") {
+                            osuBeatmap.valid = false;
+                            return osuBeatmap;
+                        }
+                    }
+                }
+                break;
+            }
+            case Metadata: {
+                size_t pos = line.find(':');
+                if (pos != std::string_view::npos) {
+                    std::string_view key = line.substr(0, pos);
+                    std::string_view value = line.substr(pos + 1);
+                    trimFront(value);
+
+                    if (key == "Title") {
+                        osuBeatmap.title = value;
+                    }
+                    else if (key == "TitleUnicode") {
+                        osuBeatmap.titleUnicode = value;
+                    }
+                    else if (key == "Artist") {
+                        osuBeatmap.artist = value;
+                    }
+                    else if (key == "ArtistUnicode") {
+                        osuBeatmap.artistUnicode = value;
+                    }
+                    else if (key == "Creator") {
+                        osuBeatmap.creator = value;
+                    }
+                    else if (key == "Version") {
+                        osuBeatmap.version = value;
+                    }
+                    else if (key == "Source") {
+                        osuBeatmap.source = value;
+                    }
+                    else if (key == "Tags") {
+                        osuBeatmap.tags = value;
+                    }
+                    else if (key == "BeatmapID") {
+                        osuBeatmap.id = value;
+                    }
+                    else if (key == "BeatmapSetID") {
+                        osuBeatmap.setId = value;
+                    }
+                }
+                break;
+            }
+            case Difficulty: {
+                size_t pos = line.find(':');
+                if (pos != std::string_view::npos) {
+                    std::string_view key = line.substr(0, pos);
+                    std::string_view value = line.substr(pos + 1);
+                    trimFront(value);
+                
+                    if (key == "CircleSize") {
+                        osuBeatmap.keyMode = stringToInt(value);
+                        if (osuBeatmap.keyMode == ERROR_INT) {
+                            osuBeatmap.keyMode = false;
+                            return osuBeatmap;
+                        }
+                    }
+                }
+                break;
+            }
+            case Events: {
+                if (not backgroundFound &&
+                    (containsCaseInsensitive(line, "png") ||
+                    containsCaseInsensitive(line, "jpg") ||
+                    containsCaseInsensitive(line, "jpeg"))
+                ) {
+                    std::vector<std::string_view> values = split(line, ',');
+
+                    if (values.size() >= 2 and values[0] == "0") {
+                        std::string background(values[2]);
+                        background.erase(std::remove(background.begin(), background.end(), '\"'), background.end());
+                        backgroundFound = true;
+                    }
+                }
+                break;
+            }
+            case TimingPoints: {
+                std::vector<std::string_view> values = split(line, ',');
+
+                if (values.size() == 8) {
+                    OsuTimingPoint timingPoint;
+                    timingPoint.time = stringToInt(values[0]);
+                    timingPoint.beatLength = stringToInt(values[1]);
+                    timingPoint.volume = stringToInt(values[2]);
+
+                    if (timingPoint.time == ERROR_INT or timingPoint.beatLength == ERROR_DOUBLE or timingPoint.volume == ERROR_INT) {
+                        osuBeatmap.valid = false;
+                        return osuBeatmap;
+                    }
+
+                    osuBeatmap.timingPoints.emplace_back(timingPoint);
+                }
+                break;
+            }
+
+            }
+        }
+
+        osuBeatmap.valid = true;
+        return osuBeatmap;
+    }
+
+    OsuBeatmap parseOsuLines(std::vector<std::string_view>& lines) {
+        PROFILE_SCOPE(__FUNCTION__);
+
+        enum Section {
+            General,
+            Editor,
+            Metadata,
+            Difficulty,
+            Events,
+            TimingPoints,
+            HitObjects,
+            Colours,
+            N_A
+        };
+
+        OsuBeatmap osuBeatmap;
+
+        constexpr std::string_view fileFormatHeader = "osu file format v";
+        Section currentSection = N_A;
+        bool backgroundFound = false;
+        bool keyModeFound = false;
+
+        for (auto& line : lines) {
+            trimFront(line);
+
+            // skip comments
+            if (line.size() > 2 and line[0] == '/' and line[1] == '/') {
+                continue;
+            }
+
+            trimBack(line);
+
+            if (line.empty()) {
+                continue;
+            }
+
+            // check for section header
+            if (line.size() > 2 and line.front() == '[' and line.back() == ']') {
+                std::string_view section = line.substr(1, line.size() - 2);
+                if (section == "General") {
+                    currentSection = General;
+                }
+                else if (section == "Editor") {
+                    currentSection = Editor;
+                }
+                else if (section == "Metadata") {
+                    currentSection = Metadata;
+                }
+                else if (section == "Difficulty") {
+                    currentSection = Difficulty;
+                }
+                else if (section == "Events") {
+                    currentSection = Events;
+                }
+                else if (section == "TimingPoints") {
+                    currentSection = TimingPoints;
+                }
+                else if (section == "HitObjects") {
+                    currentSection = HitObjects;
+                    if (not keyModeFound) {
+                        osuBeatmap.valid = false;
+                        return osuBeatmap;
+                    }
+                }
+                else if (section == "Colours") {
+                    currentSection = Colours;
+                }
+                else {
+                    currentSection = N_A;
+                }
+
+                continue;
+            }
+
+            switch (currentSection) {
+
+            case N_A: {
+                size_t found = line.find(fileFormatHeader);
+                if (found != line.npos) {
+                    // NOTE currently not used/stored, may need later for skipping old versions
+                    std::string_view version = line.substr(found + fileFormatHeader.size());
+                }
+                break;
+            }
+            case General: {
+                size_t pos = line.find(':');
+                if (pos != std::string_view::npos) {
+                    std::string_view key = line.substr(0, pos);
+                    std::string_view value = line.substr(pos + 1);
+                    trimFront(value);
+
+                    if (key == "AudioFilename") {
+                        osuBeatmap.audioFilename = value;
+                    }
+                    else if (key == "PreviewTime") {
+                        osuBeatmap.previewTime = stringToInt(value);
+                        if (osuBeatmap.previewTime == ERROR_INT) {
+                            osuBeatmap.previewTime = false;
+                            return osuBeatmap;
+                        }
+                    }
+                    else if (key == "Mode") {
+                        if (value != "3") {
+                            osuBeatmap.valid = false;
+                            return osuBeatmap;
+                        }
+                    }
+                }
+                break;
+            }
+            case Metadata: {
+                size_t pos = line.find(':');
+                if (pos != std::string_view::npos) {
+                    std::string_view key = line.substr(0, pos);
+                    std::string_view value = line.substr(pos + 1);
+                    trimFront(value);
+
+                    if (key == "Title") {
+                        osuBeatmap.title = value;
+                    }
+                    else if (key == "TitleUnicode") {
+                        osuBeatmap.titleUnicode = value;
+                    }
+                    else if (key == "Artist") {
+                        osuBeatmap.artist = value;
+                    }
+                    else if (key == "ArtistUnicode") {
+                        osuBeatmap.artistUnicode = value;
+                    }
+                    else if (key == "Creator") {
+                        osuBeatmap.creator = value;
+                    }
+                    else if (key == "Version") {
+                        osuBeatmap.version = value;
+                    }
+                    else if (key == "Source") {
+                        osuBeatmap.source = value;
+                    }
+                    else if (key == "Tags") {
+                        osuBeatmap.tags = value;
+                    }
+                    else if (key == "BeatmapID") {
+                        osuBeatmap.id = value;
+                    }
+                    else if (key == "BeatmapSetID") {
+                        osuBeatmap.setId = value;
+                    }
+                }
+                break;
+            }
+            case Difficulty: {
+                size_t pos = line.find(':');
+                if (pos != std::string_view::npos) {
+                    std::string_view key = line.substr(0, pos);
+                    std::string_view value = line.substr(pos + 1);
+                    trimFront(value);
+
+                    if (key == "CircleSize") {
+                        osuBeatmap.keyMode = stringToInt(value);
+                        keyModeFound = true;
+                        if (osuBeatmap.keyMode == ERROR_INT) {
+                            osuBeatmap.keyMode = false;
+                            return osuBeatmap;
+                        }
+                    }
+                }
+                break;
+            }
+            case Events: {
+                if (not backgroundFound &&
+                    (containsCaseInsensitive(line, "png") ||
+                        containsCaseInsensitive(line, "jpg") ||
+                        containsCaseInsensitive(line, "jpeg"))
+                    ) {
+                    std::vector<std::string_view> values = split(line, ',');
+
+                    if (values.size() >= 2 and values[0] == "0") {
+                        std::string background(values[2]);
+                        background.erase(std::remove(background.begin(), background.end(), '\"'), background.end());
+                        backgroundFound = true;
+                    }
+                }
+                break;
+            }
+            case TimingPoints: {
+                std::vector<std::string_view> values = split(line, ',');
+
+                if (values.size() == 8) {
+                    OsuTimingPoint timingPoint;
+                    timingPoint.time = stringToInt(values[0]);
+                    timingPoint.beatLength = stringToInt(values[1]);
+                    timingPoint.volume = stringToInt(values[2]);
+
+                    if (timingPoint.time == ERROR_INT or timingPoint.beatLength == ERROR_DOUBLE or timingPoint.volume == ERROR_INT) {
+                        osuBeatmap.valid = false;
+                        return osuBeatmap;
+                    }
+
+                    osuBeatmap.timingPoints.emplace_back(timingPoint);
+                }
+                break;
+            }
+            case HitObjects: {
+                std::vector<std::string_view> values = split(line, ',');
+
+                if (values.size() >= 4) {
+                    OsuHitObject hitObject;
+                    hitObject.lane = stringIntToLane(values[0], osuBeatmap.keyMode);
+                    hitObject.startTime = stringToInt(values[2]);
+                    hitObject.isLongNote = stringToInt(values[3]) & 0x80;
+
+                    if (hitObject.isLongNote) {
+                        hitObject.endTime = stringToInt(values[5]);
+                        if (hitObject.endTime == ERROR_INT) {
+                            osuBeatmap.valid = false;
+                            return osuBeatmap;
+                        }
+                    }
+
+                    if (hitObject.lane == ERROR_INT or hitObject.startTime == ERROR_INT) {
+                        osuBeatmap.valid = false;
+                        return osuBeatmap;
+                    }
+
+                    osuBeatmap.hitObjects.emplace_back(hitObject);
+                }
+
+                OsuHitObject hitObject;
+                break;
+            }
+
+            }
+        }
+
+        osuBeatmap.valid = true;
+        return osuBeatmap;
     }
 
     OsuFile parseOsuLinesSample(const std::vector<std::string_view>& lines) {
@@ -312,13 +808,13 @@ namespace ofp {
         return osu;
     }
 
-    bool readOsuFile(const fs::path& filepath) {
-        auto startTime = std::chrono::steady_clock::now();
+    OsuBeatmap readOsuFile(const fs::path& filepath) {
+        PROFILE_SCOPE(__FUNCTION__);
 
         std::ifstream file(filepath, std::ios::binary | std::ios::ate);
         if (!file) {
             std::cout << "Failed to open file\n";
-            return false;
+            return OsuBeatmap();
         }
 
         // Read entire file
@@ -351,20 +847,7 @@ namespace ofp {
             lines.emplace_back(line_start, end - line_start);
         }
 
-        long long formatParseTime = 0;
-        OsuFile osuFile = parseOsuLines(lines, formatParseTime);
-
-        auto endTime = std::chrono::steady_clock::now();
-
-        auto timeElapsed = endTime - startTime;
-        long long timeElapsedMicro = std::chrono::duration_cast<std::chrono::microseconds>(timeElapsed).count();
-
-        //std::cout << "File contents:\n" << contents;
-        std::cout << "Parsed in " << lines.size() << " lines in " << timeElapsedMicro << "us" << std::endl;
-        std::cout << ((double)timeElapsedMicro / lines.size()) << "us per line" << std::endl;
-        std::cout << " - inner time: " << formatParseTime << "us" << std::endl;
-
-        return true;
+        return parseOsuLines(lines);
     }
 
     std::vector<fs::path> findOsuFiles(const fs::path& directory) {
